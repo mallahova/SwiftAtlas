@@ -1,0 +1,36 @@
+services:
+  swiftatlas:
+    container_name: swiftatlas-swiftatlas
+    build:
+      context: ./swiftatlas
+      dockerfile: Dockerfile
+    volumes:
+      - ./swiftatlas:/swiftatlas/swiftatlas
+    ports:
+      - "8080:8080"
+    depends_on:
+      mongo:
+        condition: service_started
+    networks:
+      - swiftatlas-network
+
+  mongo:
+    container_name: swiftatlas-mongo
+    image: mongo:7.0
+    volumes:
+      - mongodata:/data/db
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: mongoadmin
+      MONGO_INITDB_ROOT_PASSWORD: password
+    ports:
+      - "27017:27017"
+    networks:
+      - swiftatlas-network
+
+networks:
+  swiftatlas-network:
+
+
+volumes:
+  mongodata:
+    driver: local
