@@ -17,6 +17,7 @@ services:
     container_name: swiftatlas-mongo
     image: mongo:7.0
     volumes:
+      - ./init-indexes.js:/docker-entrypoint-initdb.d/init-indexes.js:ro
       - mongodata:/data/db
     environment:
       MONGO_INITDB_ROOT_USERNAME: mongoadmin
