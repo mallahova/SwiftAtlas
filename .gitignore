@@ -2,3 +2,7 @@
 **/__pycache__/
 
 *.env
+_*
+schemas
+repositories
+.DS_Store

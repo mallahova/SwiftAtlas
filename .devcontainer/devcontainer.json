@@ -44,7 +44,7 @@
         "codetour.promptForWorkspaceTours": true,
         "codetour.customTourDirectory": ".devcontainer/code-tours",
         "database-client.telemetry.usesOnlineServices": false,
-        "python.defaultInterpreterPath": "~/.pyenv/versions/3.12.3/bin/python",
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
         "python.interpreter.infoVisibility": "always",
         "python.testing.pytestArgs": [
           "--verbose",
