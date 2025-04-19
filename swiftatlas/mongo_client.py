@@ -14,7 +14,7 @@ class MongoMotorClient:
         self.collection = collection_name
 
     async def find(self, query: dict):
-        return await self.db[self.collection].find(query)
+        return self.db[self.collection].find(query)
 
     async def put_item(self, item: dict):
         return await self.db[self.collection].insert_one(item)
