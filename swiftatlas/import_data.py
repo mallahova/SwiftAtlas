@@ -5,9 +5,9 @@ import logging
 import argparse
 from swiftatlas import settings
 
-from swiftatlas.swift_schemas import SwiftCodeDetailed
+from swiftatlas.schemas.swift_schemas import SwiftCodeDetailed
 from motor.motor_asyncio import AsyncIOMotorClient
-from swiftatlas.swift_repository import SwiftRepository
+from swiftatlas.repositories.swift_repository import SwiftRepository
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

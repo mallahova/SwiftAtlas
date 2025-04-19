@@ -1,15 +1,12 @@
 import logging
 import logging.config
-from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from motor.motor_asyncio import AsyncIOMotorClient
 from fastapi.middleware.cors import CORSMiddleware
 from swiftatlas.routers.swift_codes import router as swift_router
 
 from swiftatlas import settings
-from starlette.status import HTTP_422_UNPROCESSABLE_ENTITY
 
 
 logging.config.fileConfig("swiftatlas/logger_conf.ini", disable_existing_loggers=False)
@@ -39,21 +36,3 @@ app.add_middleware(
 )
 
 app.include_router(swift_router)
-
-
-# @app.exception_handler(RequestValidationError)
-# async def custom_validation_exception_handler(
-#     request: Request, exc: RequestValidationError
-# ):
-#     error_messages = []
-#     for error in exc.errors():
-#         loc = " -> ".join(str(l) for l in error["loc"])
-#         msg = error["msg"]
-#         error_messages.append(f"{loc}: {msg}")
-
-#     message = "Validation failed: " + "; ".join(error_messages)
-
-#     return JSONResponse(
-#         status_code=HTTP_422_UNPROCESSABLE_ENTITY,
-#         content={"message": message},
-#     )

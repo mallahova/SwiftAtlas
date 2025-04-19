@@ -4,13 +4,8 @@ RUN apt update && apt install -y nano tcpdump && rm -rf /var/lib/apt /var/lib/ca
 
 COPY requirements.txt .
 RUN pip install -r requirements.txt
-COPY setup.sh .
-RUN ./setup.sh
 
-RUN adduser --disabled-password --gecos "" lta
-RUN mkdir /imports && chown lta /imports
-
-WORKDIR /swiftatlas
+WORKDIR /app
 
 COPY . .
 

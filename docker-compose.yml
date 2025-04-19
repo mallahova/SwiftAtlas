@@ -13,7 +13,8 @@ services:
         condition: service_started
     networks:
       - swiftatlas-network
-
+    env_file:
+      - ./swiftatlas/var.env
   mongo:
     container_name: swiftatlas-mongo
     image: mongo:7.0

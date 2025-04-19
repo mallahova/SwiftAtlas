@@ -1,11 +1,11 @@
 import logging
-from bson import ObjectId
 from fastapi import APIRouter, HTTPException, Depends, status
 
 from typing import Union
 
-from swiftatlas.swift_repository import SwiftRepository
-from swiftatlas.swift_schemas import (
+from swiftatlas.clients.mongo_client import MongoMotorClient
+from swiftatlas.repositories.swift_repository import SwiftRepository
+from swiftatlas.schemas.swift_schemas import (
     SwiftCodeBase,
     SwiftCodeDetailed,
     SwiftCodeHeadquarterGroup,
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 async def get_swift_repository() -> SwiftRepository:
     from swiftatlas.main import app
 
-    return SwiftRepository(app.mongodb)
+    return SwiftRepository(MongoMotorClient(app.mongodb, "swift_codes"))
 
 
 @router.get(
@@ -28,12 +28,10 @@ async def get_swift_repository() -> SwiftRepository:
 async def get_swift_code_details(
     swift_code: str, repo: SwiftRepository = Depends(get_swift_repository)
 ):
-
     swift = await repo.get_swift_with_branches(swift_code)
     if not swift:
-        logger.error("SWIFT code not found", extra={"swift_code": swift_code})
         raise HTTPException(status_code=404, detail="SWIFT code not found")
-    logger.info(f"Retrieved SWIFT code details for {swift_code}")
+
     return swift
 
 
@@ -46,10 +44,6 @@ async def get_swift_codes_by_country(
     """
     result = await repo.get_swifts_by_country(country_iso2_code)
     if not result:
-        logger.error(
-            "No SWIFT codes found for country",
-            extra={"country_iso2_code": country_iso2_code},
-        )
         raise HTTPException(
             status_code=404, detail="No SWIFT codes found for this country"
         )
@@ -91,10 +85,6 @@ async def delete_swift_code(
     """
     result = await repo.delete_swift({"swiftCode": swift_code})
     if result.deleted_count == 0:
-        logger.warning(
-            "Attempted to delete non-existent SWIFT code",
-            extra={"swift_code": swift_code},
-        )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"SWIFT code {swift_code} not found.",

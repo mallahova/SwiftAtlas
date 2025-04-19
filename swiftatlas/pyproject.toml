@@ -1,0 +1,10 @@
+[tool.flake8]
+max-line-length = 120
+exclude = [
+    "__pycache__"
+]
+# Use extend-ignore to add to already ignored checks which are anti-patterns like W503.
+extend-ignore = [
+    "E203",
+    "E501",
+]

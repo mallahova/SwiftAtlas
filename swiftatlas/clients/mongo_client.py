@@ -1,7 +1,6 @@
 import logging
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
-from typing import List
 
 
 logger = logging.getLogger(__name__)

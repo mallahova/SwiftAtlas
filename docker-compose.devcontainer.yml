@@ -1,35 +1,7 @@
 services:
   swiftatlas:
-    build: .devcontainer
     command: /bin/sh -c "while sleep 1000; do :; done"
     volumes:
-      - ./:/swiftatlas
+      - ./:/app
     environment:
       IS_LOCAL: True
-    env_file:
-      - ./swiftatlas/var.env
-    ports:
-      - "8080:8080"
-    networks:
-      - swiftatlas-network
-
-  mongo:
-    container_name: swiftatlas-mongo
-    image: mongo:7.0
-    volumes:
-      - ./init-indexes.js:/docker-entrypoint-initdb.d/init-indexes.js:ro
-      - mongodata:/data/db
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: mongoadmin
-      MONGO_INITDB_ROOT_PASSWORD: password
-    ports:
-      - "27017:27017"
-    networks:
-      - swiftatlas-network
-
-volumes:
-  mongodata:
-    driver: local
-
-networks:
-  swiftatlas-network:
