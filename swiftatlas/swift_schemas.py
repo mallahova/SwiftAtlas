@@ -10,15 +10,15 @@ class SwiftCodeBase(BaseModel):
     swiftCode: str
 
 
-class SwiftCodeHeadquarter(SwiftCodeBase):
+class SwiftCodeDetailed(SwiftCodeBase):
     countryName: str
 
 
-class SwiftCodeWithBranches(SwiftCodeHeadquarter):
+class SwiftCodeHeadquarterGroup(SwiftCodeDetailed):
     branches: List[SwiftCodeBase]
 
 
-class CountrySwiftCodes(BaseModel):
+class SwiftCodeCountryGroup(BaseModel):
     countryISO2: str
     countryName: str
     swiftCodes: List[SwiftCodeBase]

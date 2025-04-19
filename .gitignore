@@ -6,3 +6,4 @@ _*
 schemas
 repositories
 .DS_Store
+.vscode/
