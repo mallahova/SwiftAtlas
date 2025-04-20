@@ -33,4 +33,5 @@ class MongoMotorClient:
         return await self.db[self.collection].delete_one(query)
 
     async def scan(self):
-        return self.db[self.collection].find()
+        # Pass empty dict to find all documents
+        return self.db[self.collection].find({})
