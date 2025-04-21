@@ -12,7 +12,7 @@ class MongoMotorClient:
         self.db = mongo_db
         self.collection = collection_name
 
-    async def find(self, query: dict):
+    def find(self, query: dict):
         return self.db[self.collection].find(query)
 
     async def put_item(self, item: dict):

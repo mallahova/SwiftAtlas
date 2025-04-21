@@ -1,8 +1,8 @@
+import re
 from pydantic import (
     BaseModel,
     field_validator,
     model_validator,
-    ValidationInfo,
 )
 from typing import List
 
@@ -22,29 +22,44 @@ class SwiftCodeBase(BaseModel):
     @field_validator("countryISO2")
     @classmethod
     def validate_country_iso2(cls, v):
+        v = v.strip().upper()
         if len(v) != 2:
             raise ValueError("countryISO2 must be 2 characters long")
-        return v.upper()
+        if not re.match(r"^[A-Z]{2}$", v):
+            raise ValueError("countryISO2 must contain only uppercase letters")
+        return v
 
     @field_validator("swiftCode")
     @classmethod
     def validate_swift_code(cls, v):
-        if len(v) == 8:
-            v = v + "XXX"
-        if len(v) != 11:
-            raise ValueError("swiftCode must be 8 or 11 characters long")
-        return v.upper()
+        v = v.strip().upper()
+        original_input = v
+        length = len(v)
+
+        if length != 8 and length != 11:
+            raise ValueError(
+                f"SWIFT code '{original_input}' must be 8 or 11 characters long."
+            )
+
+        if length == 8:
+            padded_v = v + "XXX"
+        else:
+            padded_v = v
+
+        pattern_11 = r"^[A-Z]{4}[A-Z]{2}[A-Z0-9]{2}[A-Z0-9]{3}$"
+        if not re.match(pattern_11, padded_v):
+            raise ValueError(
+                f"Input '{original_input}' has an invalid SWIFT code format."
+            )
+
+        return padded_v
 
     @model_validator(mode="after")
     def check_headquarter_swift_code_consistency(self) -> "SwiftCodeBase":
         if self.swiftCode.endswith("XXX") and not self.isHeadquarter:
-            raise ValueError(
-                "If swiftCode ends with 'XXX', isHeadquarter must be True"
-            )
+            raise ValueError("If swiftCode ends with 'XXX', isHeadquarter must be True")
         if not self.swiftCode.endswith("XXX") and self.isHeadquarter:
-            raise ValueError(
-                "If isHeadquarter is True, swiftCode must end with 'XXX'"
-            )
+            raise ValueError("If isHeadquarter is True, swiftCode must end with 'XXX'")
         return self
 
 

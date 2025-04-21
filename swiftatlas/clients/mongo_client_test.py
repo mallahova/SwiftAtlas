@@ -1,100 +1,168 @@
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+import pytest_asyncio
 from bson import ObjectId
+import motor.motor_asyncio
+from .mongo_client import MongoMotorClient
+from ..settings import MONGODB_URL
 
-from swiftatlas.clients.mongo_client import MongoMotorClient
-
-
-@pytest.fixture
-def mock_collection():
-    """Fixture for a mocked collection object."""
-    collection = AsyncMock()
-    collection.find = MagicMock(spec=callable, name="find_mock")
-    return collection
+TEST_COLLECTION = "test_items"
+TEST_DB_NAME = "swift_codes_db_test"
 
 
-@pytest.fixture
-def mock_db(mock_collection):
-    """Fixture for a mocked database object that returns the mock_collection."""
-    db = MagicMock()
-    db.__getitem__.return_value = mock_collection
-    return db
-
-
-@pytest.fixture
-def mongo_client(mock_db):
-    return MongoMotorClient(mongo_db=mock_db, collection_name="test_collection")
+@pytest_asyncio.fixture(scope="function")
+async def test_mongo_client():
+    motor_client = motor.motor_asyncio.AsyncIOMotorClient(MONGODB_URL)
+    test_db = motor_client[TEST_DB_NAME]
+    client = MongoMotorClient(test_db, TEST_COLLECTION)
+    await test_db[TEST_COLLECTION].delete_many({})
+    yield client
+    motor_client.close()
 
 
 @pytest.mark.asyncio
-async def test_find(mongo_client, mock_collection):
-    query = {"key": "value"}
-    mock_cursor = MagicMock()
-    mock_collection.find.return_value = mock_cursor
-    result = await mongo_client.find(query)
-    mock_collection.find.assert_called_once_with(query)
-    assert result == mock_cursor
+async def test_put_item(test_mongo_client: MongoMotorClient):
+    item = {"name": "test_item", "value": 123}
+    result = await test_mongo_client.put_item(item)
+    assert result.inserted_id is not None
+    inserted_item = await test_mongo_client.db[TEST_COLLECTION].find_one(
+        {"_id": result.inserted_id}
+    )
+    assert inserted_item is not None
+    assert inserted_item["name"] == "test_item"
 
 
 @pytest.mark.asyncio
-async def test_put_item(mongo_client, mock_collection):
-    item = {"_id": ObjectId(), "key": "value"}
-    mock_result = MagicMock()
-    mock_collection.insert_one.return_value = mock_result
-    result = await mongo_client.put_item(item)
-    mock_collection.insert_one.assert_awaited_once_with(item)
-    assert result == mock_result
+async def test_put_and_get_item(test_mongo_client: MongoMotorClient):
+    """Test putting an item and then retrieving it."""
+    item_to_insert = {"name": "put_and_get", "value": 789}
+    insert_result = await test_mongo_client.put_item(item_to_insert)
+    assert insert_result.inserted_id is not None
+
+    retrieved_item = await test_mongo_client.get_item(
+        {"_id": insert_result.inserted_id}
+    )
+    assert retrieved_item is not None
+    assert retrieved_item["name"] == "put_and_get"
+    assert retrieved_item["value"] == 789
+    # Ensure the _id matches and is of the correct type
+    assert retrieved_item["_id"] == insert_result.inserted_id
+    assert isinstance(retrieved_item["_id"], ObjectId)
 
 
 @pytest.mark.asyncio
-async def test_get_item(mongo_client, mock_collection):
-    query = {"key": "value"}
-    mock_item = {"_id": ObjectId(), "key": "value"}
-    mock_collection.find_one.return_value = mock_item
-    result = await mongo_client.get_item(query)
-    mock_collection.find_one.assert_awaited_once_with(query)
-    assert result == mock_item
+async def test_get_item(test_mongo_client: MongoMotorClient):
+    item = {"name": "get_me", "value": 456}
+    insert_result = await test_mongo_client.db[TEST_COLLECTION].insert_one(item)
+    retrieved_item = await test_mongo_client.get_item(
+        {"_id": insert_result.inserted_id}
+    )
+    assert retrieved_item is not None
+    assert retrieved_item["name"] == "get_me"
+    assert retrieved_item["value"] == 456
 
 
 @pytest.mark.asyncio
-async def test_update_item(mongo_client, mock_collection):
-    query = {"key": "value"}
-    update = {"$set": {"new_key": "new_value"}}
-    mock_result = MagicMock()
-    mock_collection.update_one.return_value = mock_result
-    result = await mongo_client.update_item(query, update)
-    mock_collection.update_one.assert_awaited_once_with(query, update)
-    assert result == mock_result
+async def test_find(test_mongo_client: MongoMotorClient):
+    await test_mongo_client.db[TEST_COLLECTION].insert_many(
+        [
+            {"name": "find_me", "category": "A"},
+            {"name": "find_me_too", "category": "A"},
+            {"name": "dont_find_me", "category": "B"},
+        ]
+    )
+    cursor = test_mongo_client.find({"category": "A"})
+    results = await cursor.to_list(length=100)
+    assert len(results) == 2
+    assert all(item["category"] == "A" for item in results)
 
 
 @pytest.mark.asyncio
-@patch("swiftatlas.clients.mongo_client.ObjectId", return_value="mock_object_id")
-async def test_replace_item(mock_objectid, mongo_client, mock_collection):
-    obj_id_str = "some_object_id_string"
-    item = {"key": "new_value"}
-    mock_result = MagicMock()
-    mock_collection.replace_one.return_value = mock_result
-    result = await mongo_client.replace_item(obj_id_str, item)
-    mock_objectid.assert_called_once_with(obj_id_str)
-    expected_query = {"_id": "mock_object_id"}
-    mock_collection.replace_one.assert_awaited_once_with(expected_query, item)
-    assert result == mock_result
+async def test_update_item(test_mongo_client: MongoMotorClient):
+    item = {"name": "update_me", "value": 1}
+    insert_result = await test_mongo_client.db[TEST_COLLECTION].insert_one(item)
+    update_query = {"_id": insert_result.inserted_id}
+    update_data = {"$set": {"value": 2, "updated": True}}
+    result = await test_mongo_client.update_item(update_query, update_data)
+    assert result.modified_count == 1
+    updated_item = await test_mongo_client.db[TEST_COLLECTION].find_one(update_query)
+    assert updated_item is not None
+    assert updated_item["value"] == 2
+    assert updated_item["updated"] is True
 
 
 @pytest.mark.asyncio
-async def test_delete_item(mongo_client, mock_collection):
-    query = {"key": "value"}
-    mock_result = MagicMock()
-    mock_collection.delete_one.return_value = mock_result
-    result = await mongo_client.delete_item(query)
-    mock_collection.delete_one.assert_awaited_once_with(query)
-    assert result == mock_result
+async def test_replace_item(test_mongo_client: MongoMotorClient):
+    item = {"name": "replace_me", "value": 1}
+    insert_result = await test_mongo_client.db[TEST_COLLECTION].insert_one(item)
+    obj_id_str = str(insert_result.inserted_id)
+    new_item = {"name": "replaced_item", "new_value": 999}
+    result = await test_mongo_client.replace_item(obj_id_str, new_item)
+    assert result.modified_count == 1
+    replaced_item = await test_mongo_client.db[TEST_COLLECTION].find_one(
+        {"_id": insert_result.inserted_id}
+    )
+    assert replaced_item is not None
+    assert replaced_item["name"] == "replaced_item"
+    assert replaced_item["new_value"] == 999
+    assert "value" not in replaced_item
 
 
 @pytest.mark.asyncio
-async def test_scan(mongo_client, mock_collection):
-    mock_cursor = MagicMock()
-    mock_collection.find.return_value = mock_cursor
-    result = await mongo_client.scan()
-    mock_collection.find.assert_called_once_with({})
-    assert result == mock_cursor
+async def test_delete_item(test_mongo_client: MongoMotorClient):
+    item = {"name": "delete_me", "value": 1}
+    insert_result = await test_mongo_client.db[TEST_COLLECTION].insert_one(item)
+    delete_query = {"_id": insert_result.inserted_id}
+    result = await test_mongo_client.delete_item(delete_query)
+    assert result.deleted_count == 1
+    deleted_item = await test_mongo_client.db[TEST_COLLECTION].find_one(delete_query)
+    assert deleted_item is None
+
+
+@pytest.mark.asyncio
+async def test_scan(test_mongo_client: MongoMotorClient):
+    await test_mongo_client.db[TEST_COLLECTION].insert_many(
+        [
+            {"name": "item1"},
+            {"name": "item2"},
+            {"name": "item3"},
+        ]
+    )
+    cursor = await test_mongo_client.scan()
+    results = await cursor.to_list(length=100)
+    assert len(results) == 3
+    names = {item["name"] for item in results}
+    assert names == {"item1", "item2", "item3"}
+
+
+@pytest.mark.asyncio
+async def test_get_item_not_found(test_mongo_client: MongoMotorClient):
+    non_existent_id = ObjectId()
+    retrieved_item = await test_mongo_client.get_item({"_id": non_existent_id})
+    assert retrieved_item is None
+
+
+@pytest.mark.asyncio
+async def test_update_item_not_found(test_mongo_client: MongoMotorClient):
+    non_existent_id = ObjectId()
+    update_query = {"_id": non_existent_id}
+    update_data = {"$set": {"value": 2}}
+    result = await test_mongo_client.update_item(update_query, update_data)
+    assert result.modified_count == 0
+    assert result.matched_count == 0
+
+
+@pytest.mark.asyncio
+async def test_replace_item_not_found(test_mongo_client: MongoMotorClient):
+    non_existent_id_str = str(ObjectId())
+    new_item = {"name": "replaced_item"}
+    result = await test_mongo_client.replace_item(non_existent_id_str, new_item)
+    assert result.modified_count == 0
+    assert result.matched_count == 0
+
+
+@pytest.mark.asyncio
+async def test_delete_item_not_found(test_mongo_client: MongoMotorClient):
+    non_existent_id = ObjectId()
+    delete_query = {"_id": non_existent_id}
+    result = await test_mongo_client.delete_item(delete_query)
+    assert result.deleted_count == 0

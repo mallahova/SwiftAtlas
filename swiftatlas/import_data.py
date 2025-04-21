@@ -8,6 +8,7 @@ from swiftatlas import settings
 from swiftatlas.schemas.swift_schemas import SwiftCodeDetailed
 from motor.motor_asyncio import AsyncIOMotorClient
 from swiftatlas.repositories.swift_repository import SwiftRepository
+from swiftatlas.clients.mongo_client import MongoMotorClient
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -17,7 +18,7 @@ async def import_data(file_path: str):
     try:
         mongodb_client = AsyncIOMotorClient(settings.MONGODB_URL)
         mongodb = mongodb_client[settings.MONGODB_DB_NAME]
-        swift_repo = SwiftRepository(mongodb)
+        swift_repo = SwiftRepository(MongoMotorClient(mongodb, "swift_codes"))
 
         df = pd.read_excel(file_path)
         df.drop(columns=["CODE TYPE", "TOWN NAME", "TIME ZONE"], inplace=True)
@@ -56,10 +57,10 @@ if __name__ == "__main__":
         description="Import SWIFT code data from an Excel file."
     )
     parser.add_argument(
-        "file_path",
+        "--file-path",
         type=str,
         help="Path to the Excel file containing SWIFT codes.",
-        default="swiftatlas/Interns_2025_SWIFT_CODES.xlsx",
+        default="swiftatlas/data/Interns_2025_SWIFT_CODES.xlsx",
     )
     args = parser.parse_args()
 

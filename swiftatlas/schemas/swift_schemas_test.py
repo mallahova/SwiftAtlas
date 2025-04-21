@@ -1,4 +1,5 @@
 import pytest
+from pydantic import ValidationError  # Import ValidationError
 
 from swiftatlas.schemas.swift_schemas import (
     SwiftCodeBase,
@@ -59,42 +60,67 @@ def test_swift_code_base_invalid_swift_code_length():
         "isHeadquarter": True,
         "swiftCode": "SHORT",
     }
-    with pytest.raises(ValueError) as excinfo:
+    with pytest.raises(ValidationError) as excinfo:
         SwiftCodeBase(**data)
-    assert "swiftCode must be 8 or 11 characters long" in str(excinfo.value)
+    assert "SWIFT code 'SHORT' must be 8 or 11 characters long." in str(excinfo.value)
 
     data["swiftCode"] = "TOOLONGCODE123"
     with pytest.raises(ValueError) as excinfo:
         SwiftCodeBase(**data)
-    assert "swiftCode must be 8 or 11 characters long" in str(excinfo.value)
 
 
-def test_swift_code_base_invalid_is_headquarter_mismatch_false():
-    """Test validation error when swiftCode ends with XXX but isHeadquarter is False."""
+def test_swift_code_base_invalid_swift_code_format():
     data = {
         "address": "123 Main St",
         "bankName": "Test Bank",
         "countryISO2": "US",
-        "isHeadquarter": False,  # Should be True
-        "swiftCode": "TESTCODEXXX",
+        "isHeadquarter": True,
+        "swiftCode": "INVALIDFORMAT",
     }
-    with pytest.raises(ValueError) as excinfo:
+    with pytest.raises(ValidationError) as excinfo:
+        SwiftCodeBase(**data)
+    assert "SWIFT code 'INVALIDFORMAT' must be 8 or 11 characters long." in str(
+        excinfo.value
+    )
+
+
+def test_swift_code_base_invalid_swift_code_format_11_chars():
+    data = {
+        "address": "123 Main St",
+        "bankName": "Test Bank",
+        "countryISO2": "US",
+        "isHeadquarter": False,
+        "swiftCode": "ABCD!FGH123",
+    }
+    with pytest.raises(ValidationError) as excinfo:
+        SwiftCodeBase(**data)
+    assert "Input 'ABCD!FGH123' has an invalid SWIFT code format." in str(excinfo.value)
+
+
+def test_swift_code_base_headquarter_consistency_fail_1():
+    data = {
+        "address": "123 Main St",
+        "bankName": "Test Bank HQ",
+        "countryISO2": "US",
+        "isHeadquarter": False,
+        "swiftCode": "BANKUS33XXX",
+    }
+    with pytest.raises(ValidationError) as excinfo:
         SwiftCodeBase(**data)
     assert "If swiftCode ends with 'XXX', isHeadquarter must be True" in str(
         excinfo.value
     )
 
 
-def test_swift_code_base_invalid_is_headquarter_mismatch_true():
-    """Test validation error when swiftCode doesn't end with XXX but isHeadquarter is True."""
+def test_swift_code_base_headquarter_consistency_fail_2():
     data = {
         "address": "456 Branch Ave",
-        "bankName": "Branch Bank",
-        "countryISO2": "GB",
-        "isHeadquarter": True,  # Should be False
-        "swiftCode": "BRANCHCODE1",
+        "bankName": "Test Bank Branch",
+        "countryISO2": "US",
+        "isHeadquarter": True,
+        "swiftCode": "BANKUS33BRC",
     }
-    with pytest.raises(ValueError) as excinfo:
+    with pytest.raises(ValidationError) as excinfo:
         SwiftCodeBase(**data)
     assert "If isHeadquarter is True, swiftCode must end with 'XXX'" in str(
         excinfo.value
@@ -124,7 +150,7 @@ def test_swift_code_detailed_inherits_validation():
     data = {
         "address": "789 Detail Rd",
         "bankName": "Detailed Bank",
-        "countryISO2": "DEU",  # Invalid
+        "countryISO2": "DEU",
         "isHeadquarter": True,
         "swiftCode": "DETAILCD",
         "countryName": "Germany",
@@ -166,27 +192,26 @@ def test_swift_code_headquarter_group_valid():
 
 
 def test_swift_code_headquarter_group_invalid_branch_prefix():
-    """Test validation error when a branch swiftCode prefix doesn't match the HQ."""
     branch_data_valid = {
         "address": "Branch St 1",
         "bankName": "Branch Bank 1",
         "countryISO2": "fr",
         "isHeadquarter": False,
-        "swiftCode": "hqcodefrbr1",  # Matches HQ prefix 'HQCODEFR'
+        "swiftCode": "hqcodefrbr1",
     }
     branch_data_invalid = {
         "address": "Branch St 2",
         "bankName": "Branch Bank 2",
         "countryISO2": "fr",
         "isHeadquarter": False,
-        "swiftCode": "wrongprefrt",  # Does not match HQ prefix 'HQCODEFR'
+        "swiftCode": "wrongprefrt",
     }
     hq_data = {
         "address": "HQ Ave",
         "bankName": "HQ Bank",
         "countryISO2": "fr",
         "isHeadquarter": True,
-        "swiftCode": "hqcodefr",  # Becomes HQCODEFRXXX
+        "swiftCode": "hqcodefr",
         "countryName": "france",
         "branches": [branch_data_valid, branch_data_invalid],
     }
@@ -230,18 +255,17 @@ def test_swift_code_country_group_valid():
 
 
 def test_swift_code_country_group_invalid_country_mismatch():
-    """Test validation error when a swift code countryISO2 doesn't match the group."""
     swift_code_data_valid = {
         "address": "1 Rue",
         "bankName": "Bank One",
-        "countryISO2": "ca",  # Matches group
+        "countryISO2": "ca",
         "isHeadquarter": True,
         "swiftCode": "bankone1",
     }
     swift_code_data_invalid = {
         "address": "2 Ave",
         "bankName": "Bank Two",
-        "countryISO2": "us",  # Does not match group
+        "countryISO2": "us",
         "isHeadquarter": False,
         "swiftCode": "BANKTWOADFS",
     }

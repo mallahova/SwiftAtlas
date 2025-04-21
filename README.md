@@ -35,7 +35,7 @@ cd swiftatlas
 -   Once the dev container is running, open a new terminal within VS Code (Terminal > New Terminal).
 -   Run the import script:
     ```bash
-    python -m swiftatlas.import_data swiftatlas/data/Interns_2025_SWIFT_CODES.xlsx
+    python -m swiftatlas.import_data --file-path swiftatlas/data/Interns_2025_SWIFT_CODES.xlsx    
     ```
     This command parses the Excel file and populates the MongoDB database.
 
@@ -48,6 +48,18 @@ cd swiftatlas
 -   The API will be accessible at `http://localhost:8080`.
 -   Interactive API documentation (Swagger UI) is available at `http://localhost:8080/docs`.
 -   Alternative API documentation (ReDoc) is available at `http://localhost:8080/redoc`.
+
+### 5. Running Tests
+
+-   To run the automated tests, execute the following command in the VS Code terminal:
+    ```bash
+    pytest swiftatlas
+    ```
+
+### Test Structure
+
+Tests are located in the same directory as the functionality they cover, using the `_test.py` suffix.
+Unit tests cover components like `clients`, `schemas`, and `repositories`, `routers`, while integration tests focus on the API `routers`.
 
 ## API Endpoints
 

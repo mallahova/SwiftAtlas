@@ -36,13 +36,11 @@
         "python.defaultInterpreterPath": "/usr/local/bin/python",
         "python.interpreter.infoVisibility": "always",
         "python.testing.pytestArgs": [
-          "--verbose",
-          "-m",
-          "not contract_test"
+          "--verbose"
         ],
         "python.testing.unittestEnabled": false,
         "python.testing.pytestEnabled": true,
-        "python.testing.cwd": "/swiftatlas",
+        "python.testing.cwd": "/app",
         "python.testing.autoTestDiscoverOnSaveEnabled": true,
         "workbench.colorCustomizations": {
           "activityBar.foreground": "#8833ff",

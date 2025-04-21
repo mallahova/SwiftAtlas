@@ -12,7 +12,8 @@ logger = logging.getLogger(__name__)
 
 
 class SwiftRepository:
-    def __init__(self, db):
+
+    def __init__(self, db: MongoMotorClient):
         self.client = db
 
     async def create_swift(self, swift: SwiftCodeDetailed):
@@ -34,13 +35,15 @@ class SwiftRepository:
             return None
 
         if swift_dict.get("isHeadquarter"):
-            cursor = await self.client.find(
+            cursor = self.client.find(
                 {
                     "swiftCodePrefix8": swift_dict["swiftCode"][:8],
                     "isHeadquarter": False,
                 }
             )
-            branches = [SwiftCodeBase.model_validate(b) async for b in cursor]
+            branches = []
+            async for b in cursor:
+                branches.append(SwiftCodeBase.model_validate(b))
             return SwiftCodeHeadquarterGroup(**swift_dict, branches=branches)
 
         return SwiftCodeDetailed(**swift_dict)
@@ -48,7 +51,7 @@ class SwiftRepository:
     async def get_swifts_by_country(
         self, country_iso2_code: str
     ) -> SwiftCodeCountryGroup | None:
-        cursor = await self.client.find({"countryISO2": country_iso2_code})
+        cursor = self.client.find({"countryISO2": country_iso2_code})
         swift_codes = []
 
         # Process the first item separately to get country name
@@ -78,9 +81,3 @@ class SwiftRepository:
 
     async def delete_swift(self, query):
         return await self.client.delete_item(query)
-
-    async def get_all_swifts(self) -> list[SwiftCodeDetailed]:
-        return [
-            SwiftCodeDetailed.model_validate(swift)
-            async for swift in await self.client.scan()
-        ]
