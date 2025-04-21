@@ -19,8 +19,6 @@ The primary goal of SwiftAtlas is to make SWIFT code information easily accessib
 
 ### 1. Open in Dev Container
 
-**Option 1: Using VS Code Dev Container**
-
 -   Open the project folder (`swiftatlas`) in Visual Studio Code.
 -   If prompted, click **"Reopen in Container"**. If not, open the Command Palette (`Cmd+Shift+P` or `Ctrl+Shift+P`) and select **"Dev Containers: Rebuild and Reopen in Container"**.
 -   This setup uses the `docker-compose.devcontainer.yml` file to build and run the necessary services (FastAPI app, MongoDB) in isolated containers. Your local code is mounted into the container, allowing seamless development within the dev environment.
