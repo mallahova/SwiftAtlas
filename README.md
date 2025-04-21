@@ -17,20 +17,14 @@ The primary goal of SwiftAtlas is to make SWIFT code information easily accessib
 
 ## Getting Started
 
-### 1. Clone the Repository (If you haven't already)
 
-```bash
-git clone <repository-url>
-cd swiftatlas
-```
-
-### 2. Open in Dev Container
+### 1. Open in Dev Container
 
 -   Open the project folder (`swiftatlas`) in VS Code.
 -   If prompted, click "Reopen in Container". Alternatively, open the Command Palette (Cmd+Shift+P or Ctrl+Shift+P) and select "Dev Containers: Rebuild and Reopen in Container".
 -   This uses the `docker-compose.devcontainer.yml` file to build and start the necessary services (FastAPI app, MongoDB) in isolated containers. Your local code is mounted into the container for seamless development.
 
-### 3. Import Initial Data
+### 2. Import Initial Data
 
 -   Once the dev container is running, open a new terminal within VS Code (Terminal > New Terminal).
 -   Run the import script:
@@ -39,7 +33,7 @@ cd swiftatlas
     ```
     This command parses the Excel file and populates the MongoDB database.
 
-### 4. Run the FastAPI Application
+### 3. Run the FastAPI Application
 
 -   Start the Uvicorn server:
     ```bash
@@ -49,7 +43,7 @@ cd swiftatlas
 -   Interactive API documentation (Swagger UI) is available at `http://localhost:8080/docs`.
 -   Alternative API documentation (ReDoc) is available at `http://localhost:8080/redoc`.
 
-### 5. Running Tests
+### 4. Running Tests
 
 -   To run the automated tests, execute the following command in the VS Code terminal:
     ```bash
