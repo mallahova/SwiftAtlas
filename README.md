@@ -17,12 +17,13 @@ The primary goal of SwiftAtlas is to make SWIFT code information easily accessib
 
 ## Getting Started
 
-
 ### 1. Open in Dev Container
 
--   Open the project folder (`swiftatlas`) in VS Code.
--   If prompted, click "Reopen in Container". Alternatively, open the Command Palette (Cmd+Shift+P or Ctrl+Shift+P) and select "Dev Containers: Rebuild and Reopen in Container".
--   This uses the `docker-compose.devcontainer.yml` file to build and start the necessary services (FastAPI app, MongoDB) in isolated containers. Your local code is mounted into the container for seamless development.
+**Option 1: Using VS Code Dev Container**
+
+-   Open the project folder (`swiftatlas`) in Visual Studio Code.
+-   If prompted, click **"Reopen in Container"**. If not, open the Command Palette (`Cmd+Shift+P` or `Ctrl+Shift+P`) and select **"Dev Containers: Rebuild and Reopen in Container"**.
+-   This setup uses the `docker-compose.devcontainer.yml` file to build and run the necessary services (FastAPI app, MongoDB) in isolated containers. Your local code is mounted into the container, allowing seamless development within the dev environment.
 
 ### 2. Import Initial Data
 
@@ -53,7 +54,7 @@ The primary goal of SwiftAtlas is to make SWIFT code information easily accessib
 ### Test Structure
 
 Tests are located in the same directory as the functionality they cover, using the `_test.py` suffix.
-Unit tests cover components like `clients`, `schemas`, and `repositories`, `routers`, while integration tests focus on the API `routers`.
+Unit tests cover components like `clients`, `schemas`, and `repositories`, while integration tests focus on the API `routers`.
 
 ## API Endpoints
 

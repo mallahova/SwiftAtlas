@@ -2,8 +2,8 @@ import pytest
 import pytest_asyncio
 from bson import ObjectId
 import motor.motor_asyncio
-from .mongo_client import MongoMotorClient
-from ..settings import MONGODB_URL
+from swiftatlas.clients.mongo_client import MongoMotorClient
+from swiftatlas.settings import MONGODB_URL
 
 TEST_COLLECTION = "test_items"
 TEST_DB_NAME = "swift_codes_db_test"

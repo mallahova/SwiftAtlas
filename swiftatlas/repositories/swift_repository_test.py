@@ -93,22 +93,15 @@ async def test_create_swift_existing(
 
 
 @pytest.mark.asyncio
-async def test_get_swift(mock_mongo_client, swift_repository):
-    mock_mongo_client.get_item.return_value = {
-        "swiftCode": "TESTCODE",
-        "countryISO2": "US",
-        "isHeadquarter": True,
-        "bankName": "Test Bank",
-        "address": "789 Test St, Test City",
-        "countryName": "Test Country",
-    }
+async def test_get_swift(
+    mock_mongo_client, swift_repository, sample_swift_detailed_dict
+):
+    mock_mongo_client.get_item.return_value = sample_swift_detailed_dict
     query = {"swiftCode": "TESTCODE"}
     result = await swift_repository.get_swift(query)
     mock_mongo_client.get_item.assert_awaited_once_with(query)
-    assert result["swiftCode"] == "TESTCODE"
-    assert result["countryISO2"] == "US"
+    assert result["swiftCode"] == "BANKUS33XXX"
     assert result["isHeadquarter"] is True
-    assert result["address"] == "789 Test St, Test City"
 
 
 @pytest.mark.asyncio

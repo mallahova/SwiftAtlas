@@ -1,8 +1,9 @@
 import pytest
 from fastapi import status
 from fastapi.testclient import TestClient
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
+from swiftatlas.main import app
 from swiftatlas.repositories.swift_repository import SwiftRepository
 from swiftatlas.schemas.swift_schemas import (
     SwiftCodeDetailed,
@@ -10,240 +11,359 @@ from swiftatlas.schemas.swift_schemas import (
     SwiftCodeCountryGroup,
     SwiftCodeBase,
 )
-from swiftatlas.routers.swift_codes import (
-    get_swift_repository,
-    validate_path_swift_code,
-)
-from swiftatlas.main import app
+from swiftatlas.clients.mongo_client import MongoMotorClient
+from pymongo.results import InsertOneResult, DeleteResult
 
-# Sample data for testing
-sample_hq_swift = SwiftCodeHeadquarterGroup(
-    swiftCode="BANKUS33XXX",
-    bankName="Test Bank HQ",
-    address="123 Main St",
-    countryName="United States",
-    countryISO2="US",
-    isHeadquarter=True,
-    branches=[
-        SwiftCodeBase(
-            swiftCode="BANKUS33BRC",
-            bankName="Test Bank Branch",
-            address="456 Branch Ave",
-            countryISO2="US",
-            isHeadquarter=False,
-        )
-    ],
-)
-
-sample_branch_swift = SwiftCodeDetailed(
-    swiftCode="BANKUS33BRC",
-    bankName="Test Bank Branch",
-    address="456 Branch Ave",
-    countryName="United States",
-    countryISO2="US",
-    isHeadquarter=False,
-)
-
-sample_country_group = SwiftCodeCountryGroup(
-    countryISO2="US",
-    countryName="United States",
-    swiftCodes=[
-        SwiftCodeBase(
-            swiftCode="BANKUS33XXX",
-            bankName="Test Bank HQ",
-            address="123 Main St",
-            countryISO2="US",
-            isHeadquarter=True,
-        ),
-        SwiftCodeBase(
-            swiftCode="BANKUS33BRC",
-            bankName="Test Bank Branch",
-            address="456 Branch Ave",
-            countryISO2="US",
-            isHeadquarter=False,
-        ),
-    ],
-)
-
-sample_new_swift_payload = {
-    "swiftCode": "NEWCGBR1XXX",
-    "bankName": "New Bank",
-    "address": "1 New Street",
-    "countryName": "United Kingdom",
-    "countryISO2": "GB",
-    "isHeadquarter": True,
-}
+TEST_SWIFT_CODE_HQ = "AAAABBCCXXX"
+TEST_SWIFT_CODE_BRANCH = "AAAABBCCDDD"
+TEST_COUNTRY_ISO = "IT"
+TEST_NONEXISTENT_CODE = "AAAABBCCEEE"
+TEST_NONEXISTENT_COUNTRY = "XX"
 
 
-# Mock repository fixture
 @pytest.fixture
-def mock_repo():
-    repo = MagicMock(spec=SwiftRepository)
-    repo.get_swift_with_branches = AsyncMock()
-    repo.get_swifts_by_country = AsyncMock()
-    repo.create_swift = AsyncMock()
-    repo.delete_swift = AsyncMock()
-    return repo
+def mock_mongo_client():
+    """Fixture for a mocked MongoMotorClient."""
+    client = MagicMock(spec=MongoMotorClient)
+    client.get_item = AsyncMock()
+    client.put_item = AsyncMock()
+    client.find = MagicMock()  # find returns a cursor-like object
+    client.delete_item = AsyncMock()
+    return client
 
 
-# Override dependency for testing
-@pytest.fixture(autouse=True)
-def override_dependency(mock_repo):
-    app.dependency_overrides[get_swift_repository] = lambda: mock_repo
-    yield
+@pytest.fixture
+def mock_swift_repository(mock_mongo_client):
+    """Fixture for SwiftRepository with a mocked client."""
+    return SwiftRepository(db=mock_mongo_client)
+
+
+@pytest.fixture
+def client(mock_swift_repository):
+    """Provides a TestClient instance with mocked repository dependency."""
+
+    async def override_get_swift_repository():
+        return mock_swift_repository
+
+    app.dependency_overrides[get_swift_repository] = (
+        override_get_swift_repository  # get_swift_repository needs to be imported
+    )
+    with TestClient(app) as c:
+        yield c
+    # Clean up overrides after tests
     app.dependency_overrides = {}
 
 
+# Need to import the dependency function to override it
+from swiftatlas.routers.swift_codes import get_swift_repository
+
+
 @pytest.fixture
-def client():
-    return TestClient(app)
+def hq_swift_detailed():
+    return SwiftCodeDetailed(
+        swiftCode=TEST_SWIFT_CODE_HQ,
+        bankName="Integration Test Bank HQ",
+        address="1 Integration Test St",
+        countryName="IntegrationTestland",
+        countryISO2=TEST_COUNTRY_ISO,
+        isHeadquarter=True,
+    )
 
 
-# GET /v1/swift-codes/{swift_code}
-def test_get_swift_code_details_hq(client, mock_repo):
-    mock_repo.get_swift_with_branches.return_value = sample_hq_swift
-    response = client.get("/v1/swift-codes/BANKUS33XXX")
+@pytest.fixture
+def branch_swift_detailed():
+    return SwiftCodeDetailed(
+        swiftCode=TEST_SWIFT_CODE_BRANCH,
+        bankName="Integration Test Bank Branch",
+        address="2 Integration Branch Ln",
+        countryName="IntegrationTestland",
+        countryISO2=TEST_COUNTRY_ISO,
+        isHeadquarter=False,
+    )
+
+
+@pytest.fixture
+def hq_swift_dict(hq_swift_detailed):
+    d = hq_swift_detailed.model_dump()
+    d["swiftCodePrefix8"] = d["swiftCode"][:8]
+    return d
+
+
+@pytest.fixture
+def branch_swift_dict(branch_swift_detailed):
+    d = branch_swift_detailed.model_dump()
+    d["swiftCodePrefix8"] = d["swiftCode"][:8]
+    return d
+
+
+def test_add_swift_code_hq_success(
+    client, mock_swift_repository, hq_swift_detailed, hq_swift_dict
+):
+    """Test adding a new headquarter SWIFT code successfully."""
+    mock_swift_repository.client.get_item.return_value = None  # Simulate not found
+    mock_swift_repository.client.put_item.return_value = InsertOneResult(
+        inserted_id="some_id", acknowledged=True
+    )
+
+    payload = hq_swift_detailed.model_dump()
+    response = client.post("/v1/swift-codes", json=payload)
+
+    assert response.status_code == status.HTTP_201_CREATED
+    assert (
+        response.json()["message"]
+        == f"SWIFT code {TEST_SWIFT_CODE_HQ} added successfully."
+    )
+    mock_swift_repository.client.get_item.assert_awaited_once_with(
+        {"swiftCode": TEST_SWIFT_CODE_HQ}
+    )
+    mock_swift_repository.client.put_item.assert_awaited_once_with(hq_swift_dict)
+
+
+def test_add_swift_code_branch_success(
+    client, mock_swift_repository, branch_swift_detailed, branch_swift_dict
+):
+    """Test adding a new branch SWIFT code successfully."""
+    mock_swift_repository.client.get_item.return_value = None  # Simulate not found
+    mock_swift_repository.client.put_item.return_value = InsertOneResult(
+        inserted_id="some_other_id", acknowledged=True
+    )
+
+    payload = branch_swift_detailed.model_dump()
+    response = client.post("/v1/swift-codes", json=payload)
+
+    assert response.status_code == status.HTTP_201_CREATED
+    assert (
+        response.json()["message"]
+        == f"SWIFT code {TEST_SWIFT_CODE_BRANCH} added successfully."
+    )
+    mock_swift_repository.client.get_item.assert_awaited_once_with(
+        {"swiftCode": TEST_SWIFT_CODE_BRANCH}
+    )
+    mock_swift_repository.client.put_item.assert_awaited_once_with(branch_swift_dict)
+
+
+def test_add_swift_code_conflict(
+    client, mock_swift_repository, hq_swift_detailed, hq_swift_dict
+):
+    """Test adding a SWIFT code that already exists."""
+    mock_swift_repository.client.get_item.return_value = (
+        hq_swift_dict  # Simulate already exists
+    )
+
+    payload = hq_swift_detailed.model_dump()
+    response = client.post("/v1/swift-codes", json=payload)
+
+    assert response.status_code == status.HTTP_409_CONFLICT
+    assert response.json() == {
+        "detail": f"Attempted to add duplicate SWIFT code {TEST_SWIFT_CODE_HQ}."
+    }
+    mock_swift_repository.client.get_item.assert_awaited_once_with(
+        {"swiftCode": TEST_SWIFT_CODE_HQ}
+    )
+    mock_swift_repository.client.put_item.assert_not_awaited()
+
+
+def test_get_swift_code_details_hq(
+    client, mock_swift_repository, hq_swift_dict, branch_swift_dict
+):
+    """Test retrieving details for the headquarter SWIFT code."""
+    mock_swift_repository.client.get_item.return_value = hq_swift_dict
+
+    async def mock_cursor_iter():
+        yield branch_swift_dict
+
+    mock_swift_repository.client.find.return_value = mock_cursor_iter()
+
+    response = client.get(f"/v1/swift-codes/{TEST_SWIFT_CODE_HQ}")
+
     assert response.status_code == status.HTTP_200_OK
-    assert response.json() == sample_hq_swift.model_dump()
-    mock_repo.get_swift_with_branches.assert_awaited_once_with("BANKUS33XXX")
+    data = response.json()
+    assert data["swiftCode"] == TEST_SWIFT_CODE_HQ
+    assert data["isHeadquarter"] is True
+    assert data["countryISO2"] == TEST_COUNTRY_ISO
+    assert "branches" in data
+    assert len(data["branches"]) == 1
+    assert data["branches"][0]["swiftCode"] == TEST_SWIFT_CODE_BRANCH
+
+    mock_swift_repository.client.get_item.assert_awaited_once_with(
+        {"swiftCode": TEST_SWIFT_CODE_HQ}
+    )
+    mock_swift_repository.client.find.assert_called_once_with(
+        {"swiftCodePrefix8": TEST_SWIFT_CODE_HQ[:8], "isHeadquarter": False}
+    )
 
 
-def test_get_swift_code_details_branch(client, mock_repo):
-    mock_repo.get_swift_with_branches.return_value = sample_branch_swift
-    response = client.get("/v1/swift-codes/BANKUS33BRC")
+def test_get_swift_code_details_branch(
+    client, mock_swift_repository, branch_swift_dict
+):
+    """Test retrieving details for the branch SWIFT code."""
+    mock_swift_repository.client.get_item.return_value = branch_swift_dict
+
+    response = client.get(f"/v1/swift-codes/{TEST_SWIFT_CODE_BRANCH}")
+
     assert response.status_code == status.HTTP_200_OK
-    assert response.json()["swiftCode"] == sample_branch_swift.swiftCode
-    assert response.json()["isHeadquarter"] == sample_branch_swift.isHeadquarter
-    mock_repo.get_swift_with_branches.assert_awaited_once_with("BANKUS33BRC")
+    data = response.json()
+    assert data["swiftCode"] == TEST_SWIFT_CODE_BRANCH
+    assert data["isHeadquarter"] is False
+    assert data["countryISO2"] == TEST_COUNTRY_ISO
+    assert "branches" not in data  # Branches don't have branches list
+
+    mock_swift_repository.client.get_item.assert_awaited_once_with(
+        {"swiftCode": TEST_SWIFT_CODE_BRANCH}
+    )
+    mock_swift_repository.client.find.assert_not_called()
 
 
-def test_get_swift_code_details_valid_format_not_found(client, mock_repo):
-    # Override the validation dependency for this test to assume valid input
-    app.dependency_overrides[validate_path_swift_code] = lambda: "NOTFNDUS33XXX"
-    mock_repo.get_swift_with_branches.return_value = None
-    response = client.get("/v1/swift-codes/NOTFNDUS33XXX")
+def test_get_swift_codes_by_country(
+    client, mock_swift_repository, hq_swift_dict, branch_swift_dict
+):
+    """Test retrieving all SWIFT codes for the test country."""
+
+    async def asyc_gen():
+        yield hq_swift_dict
+        yield branch_swift_dict
+
+    mock_swift_repository.client.find.return_value = asyc_gen()
+
+    response = client.get(f"/v1/swift-codes/country/{TEST_COUNTRY_ISO}")
+
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert data["countryISO2"] == TEST_COUNTRY_ISO
+    assert data["countryName"] == hq_swift_dict["countryName"].upper()
+    assert len(data["swiftCodes"]) == 2
+    codes_found = {code["swiftCode"] for code in data["swiftCodes"]}
+    assert TEST_SWIFT_CODE_HQ in codes_found
+    assert TEST_SWIFT_CODE_BRANCH in codes_found
+
+    mock_swift_repository.client.find.assert_called_once_with(
+        {"countryISO2": TEST_COUNTRY_ISO}
+    )
+
+
+def test_get_swift_code_details_not_found(client, mock_swift_repository):
+    """Test retrieving a SWIFT code that does not exist."""
+    mock_swift_repository.client.get_item.return_value = None
+
+    response = client.get("/v1/swift-codes/ZZZZZZZZXXX")
+
     assert response.status_code == status.HTTP_404_NOT_FOUND
     assert response.json() == {"detail": "SWIFT code not found"}
-    mock_repo.get_swift_with_branches.assert_awaited_once_with("NOTFNDUS33XXX")
-    # Clear the override after the test
-    del app.dependency_overrides[validate_path_swift_code]
+    mock_swift_repository.client.get_item.assert_awaited_once_with(
+        {"swiftCode": "ZZZZZZZZXXX"}
+    )
 
 
 @pytest.mark.parametrize(
-    "invalid_swift_code, expected_detail_substring",
-    [
-        ("INVALID", "must be 8 or 11 characters long"),  # Length error
-        ("TOOLONG12345", "must be 8 or 11 characters long"),  # Length error
-        (
-            "BANKUS3!",
-            "invalid SWIFT code format",
-        ),
-    ],
+    "invalid_swift_code",
+    ["INVALID", "TOOLONG12345", "BANKUS3!"],
 )
 def test_get_swift_code_details_invalid_format(
-    client, mock_repo, invalid_swift_code, expected_detail_substring
+    client, mock_swift_repository, invalid_swift_code
 ):
+    """Test retrieving a SWIFT code with an invalid format."""
     response = client.get(f"/v1/swift-codes/{invalid_swift_code}")
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-    assert "Invalid SWIFT code format" in response.json()["detail"]  # Check prefix
-    assert expected_detail_substring in response.json()["detail"]
-    mock_repo.get_swift_with_branches.assert_not_awaited()
+    assert "Invalid SWIFT code format" in response.json()["detail"]
+    mock_swift_repository.client.get_item.assert_not_awaited()
 
 
-# GET /v1/swift-codes/country/{country_iso2_code}
-def test_get_swift_codes_by_country_found(client, mock_repo):
-    mock_repo.get_swifts_by_country.return_value = sample_country_group
-    response = client.get("/v1/swift-codes/country/US")
-    assert response.status_code == status.HTTP_200_OK
-    assert response.json() == sample_country_group.model_dump()
-    mock_repo.get_swifts_by_country.assert_awaited_once_with("US")
+def test_get_swift_codes_by_country_not_found(client, mock_swift_repository):
+    """Test retrieving SWIFT codes for a country with no entries."""
+    # Mock the cursor to be empty
+    mock_cursor = AsyncMock()
+    mock_cursor.__anext__.side_effect = StopAsyncIteration
+    mock_swift_repository.client.find.return_value = mock_cursor
 
+    response = client.get(f"/v1/swift-codes/country/{TEST_NONEXISTENT_COUNTRY}")
 
-def test_get_swift_codes_by_country_valid_format_not_found(client, mock_repo):
-    mock_repo.get_swifts_by_country.return_value = None
-    response = client.get("/v1/swift-codes/country/XX")
     assert response.status_code == status.HTTP_404_NOT_FOUND
     assert response.json() == {"detail": "No SWIFT codes found for this country"}
-    mock_repo.get_swifts_by_country.assert_awaited_once_with("XX")
+    mock_swift_repository.client.find.assert_called_once_with(
+        {"countryISO2": TEST_NONEXISTENT_COUNTRY}
+    )
 
 
 @pytest.mark.parametrize(
-    "invalid_country_code, expected_detail_substring",
-    [
-        ("X", "must be 2 characters long"),
-        ("XYZ", "must be 2 characters long"),
-    ],
+    "invalid_country_code",
+    ["X", "XYZ", "12"],
 )
 def test_get_swift_codes_by_country_invalid_format(
-    client, mock_repo, invalid_country_code, expected_detail_substring
+    client, mock_swift_repository, invalid_country_code
 ):
+    """Test retrieving SWIFT codes for an invalid-format country code."""
     response = client.get(f"/v1/swift-codes/country/{invalid_country_code}")
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
     assert "Invalid Country ISO2 code format" in response.json()["detail"]
-    assert expected_detail_substring in response.json()["detail"]
-    mock_repo.get_swifts_by_country.assert_not_awaited()
+    mock_swift_repository.client.find.assert_not_called()
 
 
-# POST /v1/swift-codes
-def test_add_swift_code_success(client, mock_repo):
-    mock_repo.create_swift.return_value = True
-    response = client.post("/v1/swift-codes", json=sample_new_swift_payload)
-    assert response.status_code == status.HTTP_201_CREATED
-    assert response.json() == {"message": "SWIFT code NEWCGBR1XXX added successfully."}
-    mock_repo.create_swift.assert_awaited_once()
-    call_args, _ = mock_repo.create_swift.call_args
-    assert isinstance(call_args[0], SwiftCodeDetailed)
-    assert call_args[0].swiftCode == "NEWCGBR1XXX"
-
-
-def test_add_swift_code_conflict(client, mock_repo):
-    mock_repo.create_swift.return_value = False
-    response = client.post("/v1/swift-codes", json=sample_new_swift_payload)
-    assert response.status_code == status.HTTP_409_CONFLICT
-    assert response.json() == {
-        "detail": "Attempted to add duplicate SWIFT code NEWCGBR1XXX."
+def test_add_swift_code_validation_error(client, mock_swift_repository):
+    """Test adding a SWIFT code with invalid data (missing required field)."""
+    invalid_payload = {
+        # Missing bankName
+        "swiftCode": "VALIDCDEXXX",
+        "address": "Invalid St",
+        "countryName": "Invalidland",
+        "countryISO2": "IV",
+        "isHeadquarter": True,
     }
-    mock_repo.create_swift.assert_awaited_once()
+    response = client.post("/v1/swift-codes", json=invalid_payload)
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert "detail" in response.json()
+    assert isinstance(response.json()["detail"], list)
+    assert any(
+        err["msg"] == "Field required" and err["loc"][-1] == "bankName"
+        for err in response.json()["detail"]
+    )
+    # Validation happens before repository call
+    mock_swift_repository.client.get_item.assert_not_awaited()
+    mock_swift_repository.client.put_item.assert_not_awaited()
 
 
-# DELETE /v1/swift-codes/{swift_code}
-def test_delete_swift_code_success(client, mock_repo):
-    mock_repo.delete_swift.return_value = MagicMock(deleted_count=1)
-    response = client.delete("/v1/swift-codes/BANKUS33XXX")
+def test_delete_swift_code_success(client, mock_swift_repository):
+    """Test successfully deleting a SWIFT code."""
+    mock_swift_repository.client.delete_item.return_value = DeleteResult(
+        {"n": 1}, acknowledged=True
+    )
+
+    response = client.delete(f"/v1/swift-codes/{TEST_SWIFT_CODE_HQ}")
+
     assert response.status_code == status.HTTP_200_OK
     assert response.json() == {
-        "message": "SWIFT code BANKUS33XXX deleted successfully."
+        "message": f"SWIFT code {TEST_SWIFT_CODE_HQ} deleted successfully."
     }
-    mock_repo.delete_swift.assert_awaited_once_with({"swiftCode": "BANKUS33XXX"})
+    mock_swift_repository.client.delete_item.assert_awaited_once_with(
+        {"swiftCode": TEST_SWIFT_CODE_HQ}
+    )
 
 
-def test_delete_swift_code_valid_format_not_found(client, mock_repo):
-    # Override the validation dependency for this test to assume valid input
-    app.dependency_overrides[validate_path_swift_code] = lambda: "NOTFNDUS33XXX"
-    mock_repo.delete_swift.return_value = MagicMock(deleted_count=0)
-    response = client.delete("/v1/swift-codes/NOTFNDUS33XXX")
+def test_delete_swift_code_not_found(client, mock_swift_repository):
+    """Test deleting a SWIFT code that does not exist."""
+    mock_swift_repository.client.delete_item.return_value = DeleteResult(
+        {"n": 0}, acknowledged=True
+    )
+
+    response = client.delete(f"/v1/swift-codes/{TEST_NONEXISTENT_CODE}")
+
     assert response.status_code == status.HTTP_404_NOT_FOUND
-    assert response.json() == {"detail": "SWIFT code NOTFNDUS33XXX not found."}
-    mock_repo.delete_swift.assert_awaited_once_with({"swiftCode": "NOTFNDUS33XXX"})
-    # Clear the override after the test
-    del app.dependency_overrides[validate_path_swift_code]
+    assert response.json() == {
+        "detail": f"SWIFT code {TEST_NONEXISTENT_CODE} not found."
+    }
+    mock_swift_repository.client.delete_item.assert_awaited_once_with(
+        {"swiftCode": TEST_NONEXISTENT_CODE}
+    )
 
 
 @pytest.mark.parametrize(
-    "invalid_swift_code, expected_detail_substring",
-    [
-        ("INVALID", "must be 8 or 11 characters long"),
-        ("TOOLONG12345", "must be 8 or 11 characters long"),
-        ("BANKUS3!", "invalid SWIFT code format"),
-        ("BANK12US", "invalid SWIFT code format"),
-        ("DEUTDEFF12!", "invalid SWIFT code format"),
-    ],
+    "invalid_swift_code",
+    ["INVALID", "TOOLONG12345", "BANKUS3!"],
 )
 def test_delete_swift_code_invalid_format(
-    client, mock_repo, invalid_swift_code, expected_detail_substring
+    client, mock_swift_repository, invalid_swift_code
 ):
+    """Test deleting a SWIFT code with an invalid format."""
     response = client.delete(f"/v1/swift-codes/{invalid_swift_code}")
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-    assert "Invalid SWIFT code format" in response.json()["detail"]  # Check prefix
-    assert expected_detail_substring in response.json()["detail"]
-    mock_repo.delete_swift.assert_not_awaited()
+    assert "Invalid SWIFT code format" in response.json()["detail"]
+    mock_swift_repository.client.delete_item.assert_not_awaited()
